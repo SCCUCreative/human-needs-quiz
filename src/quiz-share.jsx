@@ -1,6 +1,6 @@
 // quiz-share.jsx — "Share your archetype": personalised, Scott Free-branded post
 // templates (Story, Post 4:5, Square, Link card) rendered client-side on a canvas,
-// plus share actions for Instagram, Facebook, LinkedIn, X and WhatsApp.
+// behind a row of Instagram, Facebook, LinkedIn, X and WhatsApp icons (each opens its own pop-up).
 //
 // Why canvas: the first name and age band never leave the browser, the embedded
 // Comfortaa/Nunito fonts are used as-is, and there are no image-service credits.
@@ -381,12 +381,21 @@
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────
+  const ICON_PATHS = {
+    "instagram": "M8 0C5.829 0 5.556.01 4.703.048 3.85.088 3.269.222 2.76.42a3.9 3.9 0 0 0-1.417.923A3.9 3.9 0 0 0 .42 2.76C.222 3.268.087 3.85.048 4.7.01 5.555 0 5.827 0 8.001c0 2.172.01 2.444.048 3.297.04.852.174 1.433.372 1.942.205.526.478.972.923 1.417.444.445.89.719 1.416.923.51.198 1.09.333 1.942.372C5.555 15.99 5.827 16 8 16s2.444-.01 3.298-.048c.851-.04 1.434-.174 1.943-.372a3.9 3.9 0 0 0 1.416-.923c.445-.445.718-.891.923-1.417.197-.509.332-1.09.372-1.942C15.99 10.445 16 10.173 16 8s-.01-2.445-.048-3.299c-.04-.851-.175-1.433-.372-1.941a3.9 3.9 0 0 0-.923-1.417A3.9 3.9 0 0 0 13.24.42c-.51-.198-1.092-.333-1.943-.372C10.443.01 10.172 0 7.998 0zm-.717 1.442h.718c2.136 0 2.389.007 3.232.046.78.035 1.204.166 1.486.275.373.145.64.319.92.599s.453.546.598.92c.11.281.24.705.275 1.485.039.843.047 1.096.047 3.231s-.008 2.389-.047 3.232c-.035.78-.166 1.203-.275 1.485a2.5 2.5 0 0 1-.599.919c-.28.28-.546.453-.92.598-.28.11-.704.24-1.485.276-.843.038-1.096.047-3.232.047s-2.39-.009-3.233-.047c-.78-.036-1.203-.166-1.485-.276a2.5 2.5 0 0 1-.92-.598 2.5 2.5 0 0 1-.6-.92c-.109-.281-.24-.705-.275-1.485-.038-.843-.046-1.096-.046-3.233s.008-2.388.046-3.231c.036-.78.166-1.204.276-1.486.145-.373.319-.64.599-.92s.546-.453.92-.598c.282-.11.705-.24 1.485-.276.738-.034 1.024-.044 2.515-.045zm4.988 1.328a.96.96 0 1 0 0 1.92.96.96 0 0 0 0-1.92m-4.27 1.122a4.109 4.109 0 1 0 0 8.217 4.109 4.109 0 0 0 0-8.217m0 1.441a2.667 2.667 0 1 1 0 5.334 2.667 2.667 0 0 1 0-5.334",
+    "facebook": "M16 8.049c0-4.446-3.582-8.05-8-8.05C3.58 0-.002 3.603-.002 8.05c0 4.017 2.926 7.347 6.75 7.951v-5.625h-2.03V8.05H6.75V6.275c0-2.017 1.195-3.131 3.022-3.131.876 0 1.791.157 1.791.157v1.98h-1.009c-.993 0-1.303.621-1.303 1.258v1.51h2.218l-.354 2.326H9.25V16c3.824-.604 6.75-3.934 6.75-7.951",
+    "linkedin": "M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 16 1.146v13.708c0 .633-.526 1.146-1.175 1.146H1.175C.526 16 0 15.487 0 14.854zm4.943 12.248V6.169H2.542v7.225zm-1.2-8.212c.837 0 1.358-.554 1.358-1.248-.015-.709-.52-1.248-1.342-1.248S2.4 3.226 2.4 3.934c0 .694.521 1.248 1.327 1.248zm4.908 8.212V9.359c0-.216.016-.432.08-.586.173-.431.568-.878 1.232-.878.869 0 1.216.662 1.216 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 0-1.845.7-2.165 1.193v.025h-.016l.016-.025V6.169h-2.4c.03.678 0 7.225 0 7.225z",
+    "x": "M12.6.75h2.454l-5.36 6.142L16 15.25h-4.937l-3.867-5.07-4.425 5.07H.316l5.733-6.57L0 .75h5.063l3.495 4.633L12.601.75Zm-.86 13.028h1.36L4.323 2.145H2.865z",
+    "whatsapp": "M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"
+  };
+
+  // formats[0] is the default tab for that network.
   const PLATFORMS = [
-    { id: 'instagram', label: 'Instagram' },
-    { id: 'facebook',  label: 'Facebook' },
-    { id: 'linkedin',  label: 'LinkedIn' },
-    { id: 'x',         label: 'X' },
-    { id: 'whatsapp',  label: 'WhatsApp' },
+    { id: 'instagram', label: 'Instagram', formats: ['story', 'post', 'square'] },
+    { id: 'facebook',  label: 'Facebook',  formats: ['post', 'square', 'card'] },
+    { id: 'linkedin',  label: 'LinkedIn',  formats: ['square', 'post', 'card'] },
+    { id: 'x',         label: 'X',         formats: ['card', 'square'] },
+    { id: 'whatsapp',  label: 'WhatsApp',  formats: ['story', 'square'] },
   ];
 
   function composerUrl(id, caption, url) {
@@ -400,49 +409,78 @@
     }
   }
   function slug(s) { return String(s || '').toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+  function isMac() { try { return /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent); } catch (e) { return false; } }
 
-  function ShareSection({ results, userName, ageBand }) {
-    const archetype = results && results.archetype;
-    const [fmtId, setFmtId] = useState('story');
+  // Puts the image itself on the clipboard so it can be pasted straight into a composer.
+  async function copyImage(blob) {
+    try {
+      if (!(navigator.clipboard && navigator.clipboard.write && window.ClipboardItem)) return false;
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function Icon({ id, size }) {
+    return <svg viewBox="0 0 16 16" width={size || 24} height={size || 24} fill="currentColor" aria-hidden="true" focusable="false"><path d={ICON_PATHS[id]} /></svg>;
+  }
+
+  // The pop-up for one network: pick a shape, tweak, share.
+  function ShareDialog({ platform, results, userName, ageBand, onClose }) {
+    const archetype = results.archetype;
+    const [fmtId, setFmtId] = useState(platform.formats[0]);
     const [useName, setUseName] = useState(!!(userName && userName.trim()));
     const [previewUrl, setPreviewUrl] = useState(null);
-    const [meta, setMeta] = useState({ usedPair: false, hasHero: true });
     const [rendering, setRendering] = useState(true);
-    const [toast, setToast] = useState('');
+    const [msg, setMsg] = useState('');
     const [canFiles, setCanFiles] = useState(false);
-    const defaultCaption = archetype
-      ? `I just found out I'm ${archetype.name} — ${NEED_META[results.primary].label} + ${NEED_META[results.secondary].label}. What drives you?`
-      : '';
-    const [caption, setCaption] = useState(defaultCaption);
+    const [caption, setCaption] = useState(
+      `I just found out I'm ${archetype.name} — ${NEED_META[results.primary].label} + ${NEED_META[results.secondary].label}. What drives you?`);
     const blobRef = useRef(null);
     const tokenRef = useRef(0);
-    const toastTimer = useRef(null);
+    const closeRef = useRef(null);
+    const panelRef = useRef(null);
+    const urlRef = useRef(null);
     const fmt = FORMATS.find(f => f.id === fmtId);
-    const fileName = `my-archetype-${slug(archetype && archetype.name)}-${fmt.id}.png`;
+    const fileName = `my-archetype-${slug(archetype.name)}-${fmt.id}.png`;
+    const formats = platform.formats.map(id => FORMATS.find(f => f.id === id));
 
     useEffect(() => {
-      if (!archetype) return;
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      if (closeRef.current) closeRef.current.focus();
+      function onKey(e) {
+        if (e.key === 'Escape') { onClose(); return; }
+        if (e.key !== 'Tab' || !panelRef.current) return;
+        const items = panelRef.current.querySelectorAll('button:not([disabled]), input, textarea, a[href]');
+        if (!items.length) return;
+        const first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+      document.addEventListener('keydown', onKey);
+      return () => { document.body.style.overflow = prevOverflow; document.removeEventListener('keydown', onKey); if (urlRef.current) URL.revokeObjectURL(urlRef.current); };
+    }, []);
+
+    useEffect(() => {
       const token = ++tokenRef.current;
-      setRendering(true);
+      setRendering(true); setMsg('');
       renderTemplate(fmt, {
         archetype, ageBand, primary: results.primary, secondary: results.secondary,
         name: useName ? (userName || '').trim() : '',
-      }).then(({ blob, usedPair, hasHero }) => {
+      }).then(({ blob }) => {
         if (token !== tokenRef.current) return;
         blobRef.current = blob;
-        setMeta({ usedPair, hasHero });
-        setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob); });
+        if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+        urlRef.current = URL.createObjectURL(blob);
+        setPreviewUrl(urlRef.current);
         try {
           const file = new File([blob], fileName, { type: 'image/png' });
           setCanFiles(!!(navigator.canShare && navigator.share && navigator.canShare({ files: [file] })));
         } catch (e) { setCanFiles(false); }
         setRendering(false);
-      }).catch(() => { if (token === tokenRef.current) { setRendering(false); say('Sorry — the image could not be created. Please try again.'); } });
-    }, [fmtId, useName, archetype && archetype.name, ageBand]);
+      }).catch(() => { if (token === tokenRef.current) { setRendering(false); setMsg('Sorry — the image could not be created. Please try again.'); } });
+    }, [fmtId, useName]);
 
-    useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); clearTimeout(toastTimer.current); }, []);
-
-    function say(msg) { setToast(msg); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 7000); }
     function fullText() { return caption.trim() + '\n' + shareUrl(); }
     function download() {
       const blob = blobRef.current; if (!blob) return false;
@@ -455,119 +493,152 @@
     async function copyCaption() {
       try { await navigator.clipboard.writeText(fullText()); return true; } catch (e) { return false; }
     }
-    async function nativeShare(channel) {
-      const blob = blobRef.current; if (!blob) return;
-      const file = new File([blob], fileName, { type: 'image/png' });
-      try {
-        await navigator.share({ files: [file], text: fullText(), title: archetype.name });
-        emitShared(archetype.name, channel, fmt.id, 'native');
-      } catch (e) {
-        if (e && e.name !== 'AbortError') {
-          download();
-          say('Sharing was blocked here — the image has been saved instead.');
+    async function onCopyCaption() { setMsg((await copyCaption()) ? 'Caption copied.' : 'Couldn’t copy automatically — select the caption and copy it.'); }
+
+    async function onShare() {
+      const blob = blobRef.current; if (!blob || rendering) return;
+      if (canFiles) {                                   // phones: OS share sheet with image + caption
+        const file = new File([blob], fileName, { type: 'image/png' });
+        try {
+          await navigator.share({ files: [file], text: fullText(), title: archetype.name });
+          emitShared(archetype.name, platform.id, fmt.id, 'native');
+        } catch (e) {
+          if (e && e.name !== 'AbortError') { download(); setMsg('Sharing was blocked here — your image has been saved instead.'); }
         }
+        return;
       }
+      if (platform.id === 'instagram') {                // no web composer: save + caption for the phone
+        download(); const c = await copyCaption();
+        emitShared(archetype.name, platform.id, fmt.id, 'download');
+        setMsg('Image saved' + (c ? ' and caption copied' : '') + ' — open Instagram on your phone and add it to a post or story.');
+        return;
+      }
+      // Desktop: copy the image first (needs the click), then open the composer.
+      const copying = copyImage(blob);
+      const link = composerUrl(platform.id, caption.trim(), shareUrl());
+      if (link) window.open(link, '_blank', 'noopener');
+      const copied = await copying;
+      if (!copied) download();
+      emitShared(archetype.name, platform.id, fmt.id, 'composer');
+      setMsg(copied
+        ? `Image copied — in the ${platform.label} window press ${isMac() ? '⌘' : 'Ctrl'}+V to add it to your post.`
+        : `Image saved — add it to your ${platform.label} post.`);
     }
-    async function onPlatform(id) {
-      if (!blobRef.current) return;
-      if (canFiles) { await nativeShare(id); return; }            // phones & some desktops: OS share sheet
-      const link = composerUrl(id, caption.trim(), shareUrl());
-      if (link) window.open(link, '_blank', 'noopener');           // opened first, while the click is still "fresh"
-      download();
-      const copied = await copyCaption();
-      emitShared(archetype.name, id, fmt.id, 'composer');
-      const where = PLATFORMS.find(p => p.id === id).label;
-      say(id === 'instagram'
-        ? 'Image saved' + (copied ? ' and caption copied' : '') + ' — open Instagram on your phone and add it to a post or story.'
-        : `Image saved${copied ? ' and caption copied' : ''} — attach it in the ${where} window that just opened.`);
-    }
-    async function onPrimary() {
-      if (canFiles) { await nativeShare('device'); return; }
-      if (download()) { emitShared(archetype.name, 'download', fmt.id, 'download'); say('Image saved to your device.'); }
-    }
-    if (!archetype) return null;
+
+    const primaryLabel = canFiles ? `Share to ${platform.label}` : platform.id === 'instagram' ? 'Save image' : `Open ${platform.label}`;
+    const help = canFiles
+      ? 'Opens your share sheet with the image and caption ready — choose ' + platform.label + '.'
+      : platform.id === 'instagram'
+        ? 'Saves the image and copies your caption. Then add it in the Instagram app.'
+        : `Copies your image and opens ${platform.label}. Paste it into the post.`;
 
     return (
-      <div className="shr-root">
-        <div className="shr-head">
-          <h2 className="shr-h2">Share your archetype</h2>
-          <p className="shr-lead">Ready-made Scott Free posts with your result. Pick a shape, then share.</p>
-        </div>
+      <div className="shr-overlay" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="shr-panel" role="dialog" aria-modal="true" aria-label={`Share to ${platform.label}`} ref={panelRef}>
+          <div className="shr-ph">
+            <h3 className="shr-ptitle"><Icon id={platform.id} size={22} /> Share to {platform.label}</h3>
+            <button type="button" className="shr-x" onClick={onClose} ref={closeRef} aria-label="Close">×</button>
+          </div>
 
-        <div className="shr-tabs" role="group" aria-label="Post shape">
-          {FORMATS.map(f => (
-            <button key={f.id} type="button" className={'shr-tab' + (f.id === fmtId ? ' on' : '')}
-              aria-pressed={f.id === fmtId} onClick={() => setFmtId(f.id)}>
-              {f.label}<span>{f.sub}</span>
+          {formats.length > 1 && (
+            <div className="shr-tabs" role="group" aria-label="Post shape">
+              {formats.map(f => (
+                <button key={f.id} type="button" className={'shr-tab' + (f.id === fmtId ? ' on' : '')}
+                  aria-pressed={f.id === fmtId} onClick={() => setFmtId(f.id)}>{f.label}<span>{f.sub}</span></button>
+              ))}
+            </div>
+          )}
+
+          <div className={'shr-stage shr-' + fmt.id}>
+            <div className="shr-frame" aria-busy={rendering}>
+              {previewUrl && <img src={previewUrl} alt={`Your ${archetype.name} share image`} className="shr-img" style={{ opacity: rendering ? 0.35 : 1 }} />}
+              {rendering && <div className="shr-spin" aria-hidden="true"></div>}
+            </div>
+          </div>
+
+          {userName && userName.trim() && (
+            <label className="shr-check">
+              <input type="checkbox" checked={useName} onChange={e => setUseName(e.target.checked)} />
+              <span>Show my first name on the image</span>
+            </label>
+          )}
+
+          <label className="shr-cap-l" htmlFor="shr-cap">Caption</label>
+          <textarea id="shr-cap" className="shr-cap" rows={3} value={caption} onChange={e => setCaption(e.target.value)} maxLength={240} />
+
+          <button type="button" className="shr-primary" onClick={onShare} disabled={rendering}>{primaryLabel}</button>
+          <p className="shr-help">{help}</p>
+          <div className="shr-links">
+            <button type="button" className="shr-link" onClick={onCopyCaption}>Copy caption</button>
+            <span aria-hidden="true">·</span>
+            <button type="button" className="shr-link" onClick={() => { if (download()) { emitShared(archetype.name, 'download', fmt.id, 'download'); setMsg('Image saved to your device.'); } }} disabled={rendering}>Download image</button>
+          </div>
+          <p className="shr-msg" role="status" aria-live="polite">{msg}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // The section itself: a heading and five icons. Everything else lives in the pop-up.
+  function ShareSection({ results, userName, ageBand }) {
+    const [open, setOpen] = useState(null);
+    const openerRef = useRef(null);
+    if (!results || !results.archetype) return null;
+    const platform = PLATFORMS.find(p => p.id === open);
+    function close() { setOpen(null); if (openerRef.current) { try { openerRef.current.focus(); } catch (e) {} } }
+    return (
+      <div className="shr-root no-print">
+        <h2 className="shr-h2">Share to socials</h2>
+        <div className="shr-icons">
+          {PLATFORMS.map(p => (
+            <button key={p.id} type="button" className="shr-icon" aria-label={`Share to ${p.label}`} title={p.label}
+              onClick={e => { openerRef.current = e.currentTarget; setOpen(p.id); }}>
+              <Icon id={p.id} size={26} />
             </button>
           ))}
         </div>
-
-        <div className={'shr-stage shr-' + fmt.id}>
-          <div className="shr-frame" aria-busy={rendering}>
-            {previewUrl && <img src={previewUrl} alt={`Your ${archetype.name} share image`} className="shr-img" style={{ opacity: rendering ? 0.35 : 1 }} />}
-            {rendering && <div className="shr-spin" aria-hidden="true"></div>}
-          </div>
-        </div>
-
-        {userName && userName.trim() && (
-          <label className="shr-check">
-            <input type="checkbox" checked={useName} onChange={e => setUseName(e.target.checked)} />
-            <span>Show my first name on the image</span>
-          </label>
-        )}
-
-        <label className="shr-cap-l" htmlFor="shr-cap">Caption (edit it if you like)</label>
-        <textarea id="shr-cap" className="shr-cap" rows={3} value={caption} onChange={e => setCaption(e.target.value)} maxLength={240} />
-
-        <button type="button" className="shr-primary" onClick={onPrimary} disabled={rendering}>
-          {canFiles ? 'Share…' : 'Download image'}
-        </button>
-        <p className="shr-or">{canFiles ? 'Opens your phone’s share sheet — pick any app.' : 'Or post straight to:'}</p>
-        <div className="shr-plats">
-          {PLATFORMS.map(p => (
-            <button key={p.id} type="button" className="shr-plat" onClick={() => onPlatform(p.id)} disabled={rendering}>{p.label}</button>
-          ))}
-        </div>
-        {canFiles && <p className="shr-note">Tapping a network opens the share sheet with your image and caption ready.</p>}
-        {!canFiles && <p className="shr-note">On a computer, your image is saved and your caption copied, then the network opens so you can attach it.</p>}
-        <p className="shr-sr" role="status" aria-live="polite">{toast}</p>
-        {toast && <div className="shr-toast" aria-hidden="true">{toast}</div>}
+        {platform && <ShareDialog key={platform.id} platform={platform} results={results} userName={userName} ageBand={ageBand} onClose={close} />}
 
         <style>{`
-          .shr-root { margin: 0 0 clamp(40px,7vh,72px); }
-          .shr-h2 { font-family:'Comfortaa',cursive; font-weight:700; font-size:clamp(24px,3.4vw,30px); color:#EAEFDD; margin:0 0 8px; }
-          .shr-lead { font-family:'Nunito',sans-serif; font-size:15px; font-weight:300; color:rgba(233,235,219,0.55); margin:0 0 22px; }
-          .shr-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
-          .shr-tab { font-family:'Nunito',sans-serif; font-weight:700; font-size:14px; color:rgba(233,235,219,0.75); background:rgba(0,0,0,0.22); border:1px solid rgba(233,235,219,0.16); border-radius:100px; padding:10px 18px; cursor:pointer; display:flex; gap:8px; align-items:baseline; }
+          .shr-root { max-width:760px; margin:0 auto; padding:clamp(40px,7vh,72px) clamp(20px,5vw,32px) clamp(48px,8vh,84px); text-align:center; }
+          .shr-h2 { font-family:'Comfortaa',cursive; font-weight:700; font-size:clamp(22px,3vw,28px); color:#EAEFDD; margin:0 0 22px; }
+          .shr-icons { display:flex; gap:clamp(10px,2.4vw,18px); justify-content:center; flex-wrap:wrap; }
+          .shr-icon { width:56px; height:56px; border-radius:50%; border:none; background:#E3DED2; color:#2F2E2C; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.28); transition:transform .15s ease, background .15s ease; }
+          .shr-icon:hover { transform:translateY(-3px); background:#F1EDE4; }
+          .shr-icon:focus-visible, .shr-tab:focus-visible, .shr-primary:focus-visible, .shr-x:focus-visible, .shr-link:focus-visible { outline:3px solid #C9D6A8; outline-offset:2px; }
+          .shr-overlay { position:fixed; inset:0; z-index:400; background:rgba(20,24,14,0.74); display:flex; align-items:center; justify-content:center; padding:16px; -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); text-align:left; }
+          .shr-panel { background:#3B4230; color:#E9EBDB; width:100%; max-width:520px; max-height:calc(100vh - 32px); max-height:calc(100dvh - 32px); overflow-y:auto; border-radius:24px; padding:clamp(18px,3vw,26px); box-shadow:0 24px 60px rgba(0,0,0,0.5); border:1px solid rgba(233,235,219,0.12); }
+          .shr-ph { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+          .shr-ptitle { display:flex; align-items:center; gap:10px; font-family:'Comfortaa',cursive; font-weight:700; font-size:19px; color:#EAEFDD; margin:0; }
+          .shr-x { width:40px; height:40px; border-radius:50%; border:1px solid rgba(233,235,219,0.2); background:rgba(0,0,0,0.2); color:#EAEFDD; font-size:24px; line-height:1; cursor:pointer; }
+          .shr-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+          .shr-tab { font-family:'Nunito',sans-serif; font-weight:700; font-size:13.5px; color:rgba(233,235,219,0.78); background:rgba(0,0,0,0.22); border:1px solid rgba(233,235,219,0.16); border-radius:100px; padding:9px 16px; cursor:pointer; display:flex; gap:8px; align-items:baseline; }
           .shr-tab span { font-weight:400; font-size:12px; opacity:0.6; }
           .shr-tab.on { background:#E3DED2; color:#2F2E2C; border-color:#E3DED2; }
-          .shr-tab:focus-visible, .shr-plat:focus-visible, .shr-primary:focus-visible { outline:3px solid #C9D6A8; outline-offset:2px; }
-          .shr-stage { display:flex; justify-content:center; margin-bottom:18px; }
-          .shr-frame { position:relative; width:100%; background:rgba(0,0,0,0.22); border-radius:22px; padding:clamp(10px,2vw,16px); box-shadow:0 12px 34px rgba(0,0,0,0.3); }
-          .shr-story .shr-frame { max-width:300px; }
-          .shr-post .shr-frame { max-width:420px; }
-          .shr-square .shr-frame { max-width:440px; }
-          .shr-card .shr-frame { max-width:560px; }
-          .shr-img { display:block; width:100%; height:auto; border-radius:12px; transition:opacity .2s; }
-          .shr-frame[aria-busy="true"] { min-height:180px; }
+          .shr-stage { display:flex; justify-content:center; margin-bottom:14px; }
+          .shr-frame { position:relative; width:100%; background:rgba(0,0,0,0.22); border-radius:18px; padding:10px; }
+          .shr-story .shr-frame { max-width:230px; }
+          .shr-post .shr-frame { max-width:340px; }
+          .shr-square .shr-frame { max-width:340px; }
+          .shr-card .shr-frame { max-width:100%; }
+          .shr-img { display:block; width:100%; height:auto; border-radius:10px; transition:opacity .2s; }
+          .shr-frame[aria-busy="true"] { min-height:160px; }
           .shr-spin { position:absolute; left:50%; top:50%; width:30px; height:30px; margin:-15px 0 0 -15px; border:3px solid rgba(233,235,219,0.25); border-top-color:#E9EBDB; border-radius:50%; animation:shrspin .8s linear infinite; }
           @keyframes shrspin { to { transform:rotate(360deg); } }
-          @media (prefers-reduced-motion: reduce){ .shr-spin{ animation:none; } }
-          .shr-check { display:flex; gap:10px; align-items:center; justify-content:center; font-family:'Nunito',sans-serif; font-size:14px; color:rgba(233,235,219,0.8); margin-bottom:18px; cursor:pointer; }
+          @media (prefers-reduced-motion: reduce){ .shr-spin{ animation:none; } .shr-icon{ transition:none; } }
+          .shr-check { display:flex; gap:10px; align-items:center; font-family:'Nunito',sans-serif; font-size:14px; color:rgba(233,235,219,0.85); margin-bottom:14px; cursor:pointer; }
           .shr-check input { width:18px; height:18px; accent-color:#C9D6A8; }
-          .shr-cap-l { display:block; font-family:'Nunito',sans-serif; font-size:12px; letter-spacing:0.14em; text-transform:uppercase; font-weight:700; color:rgba(233,235,219,0.55); margin-bottom:8px; }
-          .shr-cap { width:100%; box-sizing:border-box; font-family:'Nunito',sans-serif; font-size:15px; line-height:1.5; color:#EAEFDD; background:rgba(0,0,0,0.25); border:1px solid rgba(233,235,219,0.18); border-radius:14px; padding:14px 16px; resize:vertical; margin-bottom:20px; }
-          .shr-primary { display:block; width:100%; max-width:360px; margin:0 auto 14px; font-family:'Comfortaa',cursive; font-weight:700; font-size:17px; color:#fff; background:#9E6B49; border:none; border-radius:100px; padding:17px 40px; cursor:pointer; box-shadow:0 6px 22px rgba(0,0,0,0.28); }
+          .shr-cap-l { display:block; font-family:'Nunito',sans-serif; font-size:12px; letter-spacing:0.14em; text-transform:uppercase; font-weight:700; color:rgba(233,235,219,0.55); margin-bottom:6px; }
+          .shr-cap { width:100%; box-sizing:border-box; font-family:'Nunito',sans-serif; font-size:15px; line-height:1.5; color:#EAEFDD; background:rgba(0,0,0,0.25); border:1px solid rgba(233,235,219,0.18); border-radius:14px; padding:12px 14px; resize:vertical; margin-bottom:16px; }
+          .shr-primary { display:block; width:100%; font-family:'Comfortaa',cursive; font-weight:700; font-size:17px; color:#fff; background:#9E6B49; border:none; border-radius:100px; padding:16px 24px; cursor:pointer; box-shadow:0 6px 22px rgba(0,0,0,0.28); }
           .shr-primary:hover:not(:disabled) { background:#AE774F; }
-          .shr-primary:disabled, .shr-plat:disabled { opacity:0.5; cursor:default; }
-          .shr-or { text-align:center; font-family:'Nunito',sans-serif; font-size:13px; color:rgba(233,235,219,0.55); margin:0 0 12px; }
-          .shr-plats { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
-          .shr-plat { font-family:'Nunito',sans-serif; font-weight:700; font-size:14px; color:#EAEFDD; background:rgba(0,0,0,0.25); border:1px solid rgba(233,235,219,0.2); border-radius:100px; padding:11px 22px; cursor:pointer; min-height:44px; }
-          .shr-plat:hover:not(:disabled) { background:rgba(233,235,219,0.12); }
-          .shr-note { text-align:center; font-family:'Nunito',sans-serif; font-size:12.5px; font-weight:300; color:rgba(233,235,219,0.5); margin:14px auto 0; max-width:420px; line-height:1.5; }
-          .shr-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
-          .shr-toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); max-width:min(92vw,460px); background:#E3DED2; color:#2F2E2C; font-family:'Nunito',sans-serif; font-size:14px; font-weight:600; line-height:1.4; padding:14px 20px; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,0.4); z-index:50; text-align:center; }
+          .shr-primary:disabled { opacity:0.5; cursor:default; }
+          .shr-help { text-align:center; font-family:'Nunito',sans-serif; font-size:13px; font-weight:300; color:rgba(233,235,219,0.6); margin:10px 0 4px; line-height:1.5; }
+          .shr-links { display:flex; gap:10px; justify-content:center; align-items:center; color:rgba(233,235,219,0.4); }
+          .shr-link { background:none; border:none; color:rgba(233,235,219,0.8); font-family:'Nunito',sans-serif; font-weight:700; font-size:13px; text-decoration:underline; cursor:pointer; padding:8px 4px; }
+          .shr-link:disabled { opacity:0.5; cursor:default; }
+          .shr-msg { min-height:1.4em; margin:6px 0 0; text-align:center; font-family:'Nunito',sans-serif; font-size:13.5px; font-weight:600; color:#C9D6A8; line-height:1.4; }
+          @media print { .shr-root, .shr-overlay { display:none !important; } }
         `}</style>
       </div>
     );
