@@ -388,7 +388,10 @@
       }).catch(() => { if (token === tokenRef.current) { setRendering(false); setMsg('Sorry — the image could not be created. Please try again.'); } });
     }, [fmtId]);
 
+    const isInstagram = platform.id === 'instagram';
     function fullText() { return caption.trim() + '\n' + shareUrl(); }
+    // What Instagram users paste: just the link for a Story (sticker), caption + link for a feed post.
+    function igClip() { return fmt.id === 'story' ? pageUrl(archetype) : caption.trim() + '\n' + pageUrl(archetype); }
     function download() {
       const blob = blobRef.current; if (!blob) return false;
       const a = document.createElement('a');
@@ -415,6 +418,8 @@
       }
       if (canFiles) {                                   // phones: OS share sheet with image + caption
         const file = new File([blob], fileName, { type: 'image/jpeg' });
+        // Instagram can't take a link from the share sheet, so put it on the clipboard for the Story link sticker.
+        if (isInstagram) { copyText(igClip()); }
         try {
           await navigator.share({ files: [file], text: fullText(), title: archetype.name });
           emitShared(archetype.name, platform.id, fmt.id, 'native');
@@ -434,10 +439,11 @@
         return;
       }
       // Desktop with no composer (Instagram) or a Story: save the image, copy the caption.
-      download(); const c = await copyText(fullText());
+      download(); const c = await copyText(isInstagram ? igClip() : fullText());
       emitShared(archetype.name, platform.id, fmt.id, 'download');
-      setMsg('Image saved' + (c ? ' and caption copied' : '') + (platform.id === 'instagram'
-        ? ' — open Instagram on your phone and add it to a post or story.' : ` — add it to your ${platform.label} post or story.`));
+      setMsg(isInstagram
+        ? 'Image saved' + (c ? (fmt.id === 'story' ? ' and link copied' : ' and caption + link copied') : '') + ' — open Instagram on your phone and follow the steps below.'
+        : 'Image saved' + (c ? ' and caption copied' : '') + ` — add it to your ${platform.label} post or story.`);
     }
 
     const primaryLabel = canFiles ? `Share to ${platform.label}` : linkMode ? `Open ${platform.label}` : 'Save image';
@@ -477,6 +483,17 @@
 
           <button type="button" className="shr-primary" onClick={onShare} disabled={rendering}>{primaryLabel}</button>
           <p className="shr-help">{help}</p>
+          {isInstagram && (
+            <div className="shr-guide">
+              <p className="shr-guide-t">Adding your link on Instagram</p>
+              <ol className="shr-guide-l">
+                <li>Post your image as a <strong>Story</strong> (or add it to your feed).</li>
+                <li>Before you post, tap the <strong>sticker</strong> icon, choose <strong>Link</strong>, and <strong>paste</strong> the link{canFiles ? ' — we copy it when you tap Share' : ''}.</li>
+                <li>Not copied? <button type="button" className="shr-inline" onClick={async () => setMsg((await copyText(pageUrl(archetype))) ? 'Link copied.' : 'Couldn’t copy automatically — long-press the link to copy it.')}>Copy the link</button>.</li>
+              </ol>
+              <p className="shr-guide-n">Links in a feed caption aren’t tappable on Instagram — use the Story link sticker, or put the link in your bio.</p>
+            </div>
+          )}
           <div className="shr-links">
             <button type="button" className="shr-link" onClick={onCopyCaption}>Copy caption + link</button>
             <span aria-hidden="true">·</span>
@@ -603,6 +620,12 @@
         .shr-links { display:flex; gap:10px; justify-content:center; align-items:center; color:rgba(233,235,219,0.4); }
         .shr-link { background:none; border:none; color:rgba(233,235,219,0.8); font-family:'Nunito',sans-serif; font-weight:700; font-size:13px; text-decoration:underline; cursor:pointer; padding:8px 4px; }
         .shr-link:disabled { opacity:0.5; cursor:default; }
+        .shr-guide { margin:12px 0 2px; padding:12px 14px; border-radius:14px; background:rgba(233,235,219,0.07); border:1px solid rgba(233,235,219,0.14); text-align:left; }
+        .shr-guide-t { margin:0 0 6px; font-family:'Comfortaa',sans-serif; font-weight:700; font-size:13.5px; color:#E9EBDB; }
+        .shr-guide-l { margin:0; padding-left:20px; font-family:'Nunito',sans-serif; font-size:13px; line-height:1.55; color:rgba(233,235,219,0.85); }
+        .shr-guide-l li { margin:3px 0; }
+        .shr-guide-n { margin:8px 0 0; font-family:'Nunito',sans-serif; font-size:12.5px; line-height:1.45; color:rgba(233,235,219,0.6); }
+        .shr-inline { background:none; border:0; padding:0; font:inherit; color:#C9D6A8; text-decoration:underline; cursor:pointer; }
         .shr-msg { min-height:1.4em; margin:6px 0 0; text-align:center; font-family:'Nunito',sans-serif; font-size:13.5px; font-weight:600; color:#C9D6A8; line-height:1.4; }
         @media print { .shr-root, .shr-overlay, .shr-tb-btn { display:none !important; } }
       `}</style>
