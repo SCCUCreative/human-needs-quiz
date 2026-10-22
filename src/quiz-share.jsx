@@ -364,8 +364,15 @@
     const fmt = FORMATS.find(f => f.id === fmtId);
     const fileName = `${slug(archetype.name)}-${fmt.id}.jpg`;
     const formats = platform.formats.map(id => FORMATS.find(f => f.id === id));
-    // Desktop + landscape card + a network with a web composer: share the link, the card builds itself.
-    const linkMode = !canFiles && fmt.id === 'card' && !!composerUrl(platform.id, '', 'x');
+    // Landscape card + a network that builds link previews (Facebook, LinkedIn, X, WhatsApp):
+    // share the link and the card builds itself from the page's Open Graph tags.
+    const linkCard = fmt.id === 'card' && !!composerUrl(platform.id, '', 'x');
+    // Desktop: open that network's own composer with the link.
+    const linkMode = !canFiles && linkCard;
+    // Phones: LinkedIn, Facebook and X only take the link from the OS share sheet (they ignore an
+    // attached image), so hand over the link and let the preview show the card. Everything else
+    // (Instagram, WhatsApp, Stories) gets the image file.
+    const phoneLink = canFiles && linkCard && platform.id !== 'whatsapp';
 
     useModal(panelRef, closeRef, onClose);
 
@@ -397,6 +404,15 @@
 
     async function onShare() {
       const blob = blobRef.current; if (!blob || rendering) return;
+      if (phoneLink) {                                  // phones: OS share sheet with the link (card = link preview)
+        try {
+          await navigator.share({ title: archetype.name, text: caption.trim(), url: pageUrl(archetype) });
+          emitShared(archetype.name, platform.id, fmt.id, 'native-link');
+        } catch (e) {
+          if (e && e.name !== 'AbortError') { await copyText(caption.trim() + '\n' + pageUrl(archetype)); setMsg('Sharing was blocked here — your caption and link are copied.'); }
+        }
+        return;
+      }
       if (canFiles) {                                   // phones: OS share sheet with image + caption
         const file = new File([blob], fileName, { type: 'image/jpeg' });
         try {
@@ -425,7 +441,9 @@
     }
 
     const primaryLabel = canFiles ? `Share to ${platform.label}` : linkMode ? `Open ${platform.label}` : 'Save image';
-    const help = canFiles
+    const help = phoneLink
+      ? `Opens your share sheet — choose ${platform.label}. The card appears as the link preview.`
+      : canFiles
       ? 'Opens your share sheet with the image and caption ready — choose ' + platform.label + '.'
       : linkMode ? `Opens ${platform.label} with this card already attached.`
       : platform.id === 'instagram' ? 'Saves the image and copies your caption. Then add it in the Instagram app.'
