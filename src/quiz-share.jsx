@@ -297,9 +297,19 @@
       default:         return null; // Instagram has no web composer
     }
   }
-  // Can this device hand an image file to the OS share sheet? (phones / some tablets)
+  // Phones and tablets: hand the image to the OS share sheet. Desktop browsers (Chrome/Edge on
+  // Windows, Safari on Mac) also expose navigator.share, but there it only opens the operating
+  // system's own share window — so on desktop we go to the network's own composer instead.
+  function isTouchMobile() {
+    try {
+      const ua = navigator.userAgent || '';
+      if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
+      return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1; // iPadOS reports as a Mac
+    } catch (e) { return false; }
+  }
   function deviceCanShareFiles() {
     try {
+      if (!isTouchMobile()) return false;
       const f = new File([new Uint8Array(4)], 'a.jpg', { type: 'image/jpeg' });
       return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [f] }));
     } catch (e) { return false; }
