@@ -244,6 +244,11 @@
     return { blob, hasHero: !!hero };
   }
 
+  // Some embeds/viewers (and strict CSPs) refuse blob: images, so previews use data: URLs.
+  function blobToDataUrl(blob) {
+    return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
+  }
+
   // ── xAPI-ready event ──────────────────────────────────────────────────────
   // Emits a statement-shaped payload (no name, no actor — the LMS wrapper adds the
   // actor). Listen with window.addEventListener('hnq:shared', e => e.detail), or
@@ -353,17 +358,15 @@
     const linkMode = !canFiles && fmt.id === 'card' && !!composerUrl(platform.id, '', 'x');
 
     useModal(panelRef, closeRef, onClose);
-    useEffect(() => () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); }, []);
 
     useEffect(() => {
       const token = ++tokenRef.current;
       setRendering(true); setMsg('');
-      renderCard(fmt.id, archetype).then(({ blob }) => {
+      renderCard(fmt.id, archetype).then(async ({ blob }) => {
+        const dataUrl = await blobToDataUrl(blob);
         if (token !== tokenRef.current) return;
         blobRef.current = blob;
-        if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-        urlRef.current = URL.createObjectURL(blob);
-        setPreviewUrl(urlRef.current);
+        setPreviewUrl(dataUrl);
         setRendering(false);
       }).catch(() => { if (token === tokenRef.current) { setRendering(false); setMsg('Sorry — the image could not be created. Please try again.'); } });
     }, [fmtId]);
@@ -580,5 +583,5 @@
 
   window.ShareSection = ShareSection;
   window.ShareButton = ShareButton;
-  window.HNQ_SHARE = { FORMATS, STORY, renderCard, shareUrl, pageUrl, cardImageUrl, slug };
+  window.HNQ_SHARE = { FORMATS, STORY, renderCard, blobToDataUrl, shareUrl, pageUrl, cardImageUrl, slug };
 })();

@@ -3521,6 +3521,16 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
     };
   }
 
+  // Some embeds/viewers (and strict CSPs) refuse blob: images, so previews use data: URLs.
+  function blobToDataUrl(blob) {
+    return new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = rej;
+      fr.readAsDataURL(blob);
+    });
+  }
+
   // ── xAPI-ready event ──────────────────────────────────────────────────────
   // Emits a statement-shaped payload (no name, no actor — the LMS wrapper adds the
   // actor). Listen with window.addEventListener('hnq:shared', e => e.detail), or
@@ -3711,21 +3721,17 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
     // Desktop + landscape card + a network with a web composer: share the link, the card builds itself.
     const linkMode = !canFiles && fmt.id === 'card' && !!composerUrl(platform.id, '', 'x');
     useModal(panelRef, closeRef, onClose);
-    useEffect(() => () => {
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    }, []);
     useEffect(() => {
       const token = ++tokenRef.current;
       setRendering(true);
       setMsg('');
-      renderCard(fmt.id, archetype).then(({
+      renderCard(fmt.id, archetype).then(async ({
         blob
       }) => {
+        const dataUrl = await blobToDataUrl(blob);
         if (token !== tokenRef.current) return;
         blobRef.current = blob;
-        if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-        urlRef.current = URL.createObjectURL(blob);
-        setPreviewUrl(urlRef.current);
+        setPreviewUrl(dataUrl);
         setRendering(false);
       }).catch(() => {
         if (token === tokenRef.current) {
@@ -4085,6 +4091,7 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
     FORMATS,
     STORY,
     renderCard,
+    blobToDataUrl,
     shareUrl,
     pageUrl,
     cardImageUrl,
@@ -4112,8 +4119,7 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
       if (!r.hasHero) noHero++;
       blobs[it.slug + '-' + kind] = r.blob;
       const img = document.querySelector('#' + kind + '-' + it.slug + ' img');
-      if (img.dataset.u) URL.revokeObjectURL(img.dataset.u);
-      img.dataset.u = img.src = URL.createObjectURL(r.blob);
+      img.src = await S.blobToDataUrl(r.blob);
     }
   }
   async function all(){
@@ -4165,5 +4171,7 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
 
   all().then(() => { $('zip').disabled = false; }).catch(e => { $('status').textContent = 'Something went wrong: ' + e.message; });
 })();
+window.addEventListener('error', e => { const s = document.getElementById('status'); if (s) s.textContent = 'Error: ' + (e.message || e.error); });
+window.addEventListener('unhandledrejection', e => { const s = document.getElementById('status'); if (s) s.textContent = 'Error: ' + ((e.reason && e.reason.message) || e.reason); });
 </script>
 </body></html>
