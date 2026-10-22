@@ -5,9 +5,11 @@ Facebook, LinkedIn, X and WhatsApp. People who click the link are sent on to the
 
 Usage (from the repo root):   python3 tools/build_share_pages.py
 Needs node (reads the archetype copy straight from the quiz bundle's data file).
-Card images are expected at cards/<archetype>-card.jpg (export them with tools/card-studio.html).
+Card images are expected at cards/<archetype>-card.jpg (2400x1260, export them with tools/card-studio.html)
+and cards/<archetype>-card-wa.jpg (1200x630, under ~300 KB, made by tools/make_wa_cards.py) - WhatsApp drops
+larger preview images, so it gets its own twin page at share/<archetype>/wa/.
 """
-import html, json, os, re, subprocess, sys
+import html, json, os, re, struct, subprocess, sys
 
 QUIZ_URL = 'https://www.nubuverse.com/human-needs-quiz/'
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,8 +39,8 @@ PAGE = '''<!doctype html>
 <meta property="og:url" content="{url}">
 <meta property="og:image" content="{img}">
 <meta property="og:image:type" content="image/jpeg">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
+<meta property="og:image:width" content="{iw}">
+<meta property="og:image:height" content="{ih}">
 <meta property="og:image:alt" content="{alt}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{title}">
@@ -53,16 +55,32 @@ PAGE = '''<!doctype html>
 </html>
 '''
 e = html.escape
+
+def jpeg_size(path, fallback):
+    """Real pixel size of a card (read from the JPEG header), so the og:image width/height are always right."""
+    try:
+        with open(path, 'rb') as f:
+            f.read(2)
+            while True:
+                m, = struct.unpack('>H', f.read(2)); n, = struct.unpack('>H', f.read(2))
+                if 0xFFC0 <= m <= 0xFFCF and m not in (0xFFC4, 0xFFC8, 0xFFCC):
+                    f.read(1); h, w = struct.unpack('>HH', f.read(4)); return w, h
+                f.seek(n - 2, 1)
+    except Exception:
+        return fallback
 for a in data:
     s = slug(a['name'])
     d = os.path.join(ROOT, 'share', s)
     os.makedirs(d, exist_ok=True)
     glance = '. '.join(g.rstrip('.') for g in a['glance'][:2]) + '.'
-    page = PAGE.format(
-        title=e("I’m %s — what drives you?" % a['name']),
-        desc=e("%s Take the Six Human Needs Quiz to find your archetype." % glance),
-        url=QUIZ_URL + 'share/%s/' % s, img=QUIZ_URL + 'cards/%s-card.jpg' % s,
-        alt=e("%s — Six Human Needs Quiz by Scott Free Group" % a['name']),
-        quiz=QUIZ_URL, quiz_js=json.dumps(QUIZ_URL))
-    open(os.path.join(d, 'index.html'), 'w', encoding='utf-8').write(page)
-print('wrote', len(data), 'pages to share/')
+    for sub, img, fb in (('', 'cards/%s-card.jpg' % s, (2400, 1260)), ('wa/', 'cards/%s-card-wa.jpg' % s, (1200, 630))):
+        iw, ih = jpeg_size(os.path.join(ROOT, img), fb)
+        page = PAGE.format(
+            title=e("I’m %s — what drives you?" % a['name']),
+            desc=e("%s Take the Six Human Needs Quiz to find your archetype." % glance),
+            url=QUIZ_URL + 'share/%s/%s' % (s, sub), img=QUIZ_URL + img, iw=iw, ih=ih,
+            alt=e("%s — Six Human Needs Quiz by Scott Free Group" % a['name']),
+            quiz=QUIZ_URL, quiz_js=json.dumps(QUIZ_URL))
+        os.makedirs(os.path.join(d, sub), exist_ok=True)
+        open(os.path.join(d, sub, 'index.html'), 'w', encoding='utf-8').write(page)
+print('wrote', len(data) * 2, 'pages to share/')

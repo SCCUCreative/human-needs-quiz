@@ -17,11 +17,12 @@
   // all hang off it:  <base>share/<archetype>/   and   <base>cards/<archetype>-card.jpg
   const SHARE_URL_OVERRIDE = null; // null = use QUIZ_URL below
   const QUIZ_URL = 'https://www.nubuverse.com/human-needs-quiz/';
-  const HERO_W = 2200; // width asked from Cloudinary for the scene art
+  const HERO_W = 3000; // width asked from Cloudinary for the scene art (the landscape card is drawn at 2x)
 
   const FORMATS = [
-    { id: 'card',  label: 'Landscape card', sub: '1.91:1', w: 1200, h: 630 },
-    { id: 'story', label: 'Story',          sub: '9:16',   w: 1080, h: 1920 },
+    // scale = pixel density of the exported image (card is 2400x1260 so it stays sharp on retina feeds)
+    { id: 'card',  label: 'Landscape card', sub: '1.91:1', w: 1200, h: 630, scale: 2 },
+    { id: 'story', label: 'Story',          sub: '9:16',   w: 1080, h: 1920, scale: 1 },
   ];
 
   // Tweak points for the portrait story (px on the 1080x1920 canvas).
@@ -38,7 +39,8 @@
   function hostLabel(u) { return u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''); }
   function slug(s) { return String(s || '').toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
   // Page whose link preview shows the generic card (see share/<archetype>/index.html).
-  function pageUrl(archetype) { return shareUrl() + 'share/' + slug(archetype.name) + '/'; }
+  // WhatsApp only shows link-preview images under ~300 KB, so it gets a twin page (…/wa/) that points at a lighter 1200x630 copy of the card.
+  function pageUrl(archetype, light) { return shareUrl() + 'share/' + slug(archetype.name) + '/' + (light ? 'wa/' : ''); }
   function cardImageUrl(archetype, fmtId) { return shareUrl() + 'cards/' + slug(archetype.name) + '-' + fmtId + '.jpg'; }
 
   // ── Image helpers ─────────────────────────────────────────────────────────
@@ -61,7 +63,7 @@
   function slimHero(url) {
     // Ask Cloudinary for a web-sized copy (the originals are 5504px wide); the full
     // original is the fallback if transformations are ever restricted.
-    return url.replace('/image/upload/', '/image/upload/w_' + HERO_W + ',q_auto:good,f_jpg/');
+    return url.replace('/image/upload/', '/image/upload/w_' + HERO_W + ',q_auto:best,f_jpg/');
   }
 
   // ── Canvas helpers ────────────────────────────────────────────────────────
@@ -236,11 +238,14 @@
       pColor: pm.color, host: hostLabel(shareUrl()),
     };
     const canvas = document.createElement('canvas');
-    canvas.width = fmt.w; canvas.height = fmt.h;
+    const sc = fmt.scale || 1;
+    canvas.width = fmt.w * sc; canvas.height = fmt.h * sc;
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.scale(sc, sc);
     ctx.textBaseline = 'alphabetic';
     if (fmt.id === 'story') layoutStory(ctx, d); else layoutCard(ctx, d);
-    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.92));
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.95));
     return { blob, hasHero: !!hero };
   }
 
@@ -429,7 +434,7 @@
         return;
       }
       if (linkMode) {                                   // desktop: composer with the link; the card is built from the link
-        const link = composerUrl(platform.id, caption.trim(), pageUrl(archetype));
+        const link = composerUrl(platform.id, caption.trim(), pageUrl(archetype, platform.id === 'whatsapp'));
         const needsCaption = platform.id === 'facebook' || platform.id === 'linkedin';
         const copied = needsCaption ? await copyText(caption.trim()) : false;
         window.open(link, '_blank', 'noopener');
