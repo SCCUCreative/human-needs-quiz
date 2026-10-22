@@ -484,7 +484,7 @@ h2{font-family:'Comfortaa',cursive;font-size:19px;margin:34px 0 14px}
   </details>
 </div>
 
-<h2 data-sec="card">Landscape link cards · 1200 × 630</h2>
+<h2 data-sec="card">Landscape link cards · 2400 × 1260</h2>
 <div id="cards" class="grid cards" data-sec="card"></div>
 <h2 data-sec="story">Portrait stories · 1080 × 1920</h2>
 <div id="stories" class="grid stories" data-sec="story"></div>
@@ -3214,20 +3214,24 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
   // all hang off it:  <base>share/<archetype>/   and   <base>cards/<archetype>-card.jpg
   const SHARE_URL_OVERRIDE = null; // null = use QUIZ_URL below
   const QUIZ_URL = 'https://www.nubuverse.com/human-needs-quiz/';
-  const HERO_W = 2200; // width asked from Cloudinary for the scene art
+  const HERO_W = 3000; // width asked from Cloudinary for the scene art (the landscape card is drawn at 2x)
 
-  const FORMATS = [{
+  const FORMATS = [
+  // scale = pixel density of the exported image (card is 2400x1260 so it stays sharp on retina feeds)
+  {
     id: 'card',
     label: 'Landscape card',
     sub: '1.91:1',
     w: 1200,
-    h: 630
+    h: 630,
+    scale: 2
   }, {
     id: 'story',
     label: 'Story',
     sub: '9:16',
     w: 1080,
-    h: 1920
+    h: 1920,
+    scale: 1
   }];
 
   // Tweak points for the portrait story (px on the 1080x1920 canvas).
@@ -3287,7 +3291,7 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
   function slimHero(url) {
     // Ask Cloudinary for a web-sized copy (the originals are 5504px wide); the full
     // original is the fallback if transformations are ever restricted.
-    return url.replace('/image/upload/', '/image/upload/w_' + HERO_W + ',q_auto:good,f_jpg/');
+    return url.replace('/image/upload/', '/image/upload/w_' + HERO_W + ',q_auto:best,f_jpg/');
   }
 
   // ── Canvas helpers ────────────────────────────────────────────────────────
@@ -3509,12 +3513,16 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
       host: hostLabel(shareUrl())
     };
     const canvas = document.createElement('canvas');
-    canvas.width = fmt.w;
-    canvas.height = fmt.h;
+    const sc = fmt.scale || 1;
+    canvas.width = fmt.w * sc;
+    canvas.height = fmt.h * sc;
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.scale(sc, sc);
     ctx.textBaseline = 'alphabetic';
     if (fmt.id === 'story') layoutStory(ctx, d);else layoutCard(ctx, d);
-    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.92));
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.95));
     return {
       blob,
       hasHero: !!hero
@@ -3626,9 +3634,21 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
       // Instagram has no web composer
     }
   }
-  // Can this device hand an image file to the OS share sheet? (phones / some tablets)
+  // Phones and tablets: hand the image to the OS share sheet. Desktop browsers (Chrome/Edge on
+  // Windows, Safari on Mac) also expose navigator.share, but there it only opens the operating
+  // system's own share window — so on desktop we go to the network's own composer instead.
+  function isTouchMobile() {
+    try {
+      const ua = navigator.userAgent || '';
+      if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
+      return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1; // iPadOS reports as a Mac
+    } catch (e) {
+      return false;
+    }
+  }
   function deviceCanShareFiles() {
     try {
+      if (!isTouchMobile()) return false;
       const f = new File([new Uint8Array(4)], 'a.jpg', {
         type: 'image/jpeg'
       });
@@ -3718,8 +3738,15 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
     const fmt = FORMATS.find(f => f.id === fmtId);
     const fileName = `${slug(archetype.name)}-${fmt.id}.jpg`;
     const formats = platform.formats.map(id => FORMATS.find(f => f.id === id));
-    // Desktop + landscape card + a network with a web composer: share the link, the card builds itself.
-    const linkMode = !canFiles && fmt.id === 'card' && !!composerUrl(platform.id, '', 'x');
+    // Landscape card + a network that builds link previews (Facebook, LinkedIn, X, WhatsApp):
+    // share the link and the card builds itself from the page's Open Graph tags.
+    const linkCard = fmt.id === 'card' && !!composerUrl(platform.id, '', 'x');
+    // Desktop: open that network's own composer with the link.
+    const linkMode = !canFiles && linkCard;
+    // Phones: LinkedIn, Facebook and X only take the link from the OS share sheet (they ignore an
+    // attached image), so hand over the link and let the preview show the card. Everything else
+    // (Instagram, WhatsApp, Stories) gets the image file.
+    const phoneLink = canFiles && linkCard && platform.id !== 'whatsapp';
     useModal(panelRef, closeRef, onClose);
     useEffect(() => {
       const token = ++tokenRef.current;
@@ -3740,8 +3767,13 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
         }
       });
     }, [fmtId]);
+    const isInstagram = platform.id === 'instagram';
     function fullText() {
       return caption.trim() + '\n' + shareUrl();
+    }
+    // What Instagram users paste: just the link for a Story (sticker), caption + link for a feed post.
+    function igClip() {
+      return fmt.id === 'story' ? pageUrl(archetype) : caption.trim() + '\n' + pageUrl(archetype);
     }
     function download() {
       const blob = blobRef.current;
@@ -3769,11 +3801,32 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
     async function onShare() {
       const blob = blobRef.current;
       if (!blob || rendering) return;
+      if (phoneLink) {
+        // phones: OS share sheet with the link (card = link preview)
+        try {
+          await navigator.share({
+            title: archetype.name,
+            text: caption.trim(),
+            url: pageUrl(archetype)
+          });
+          emitShared(archetype.name, platform.id, fmt.id, 'native-link');
+        } catch (e) {
+          if (e && e.name !== 'AbortError') {
+            await copyText(caption.trim() + '\n' + pageUrl(archetype));
+            setMsg('Sharing was blocked here — your caption and link are copied.');
+          }
+        }
+        return;
+      }
       if (canFiles) {
         // phones: OS share sheet with image + caption
         const file = new File([blob], fileName, {
           type: 'image/jpeg'
         });
+        // Instagram can't take a link from the share sheet, so put it on the clipboard for the Story link sticker.
+        if (isInstagram) {
+          copyText(igClip());
+        }
         try {
           await navigator.share({
             files: [file],
@@ -3801,12 +3854,12 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
       }
       // Desktop with no composer (Instagram) or a Story: save the image, copy the caption.
       download();
-      const c = await copyText(fullText());
+      const c = await copyText(isInstagram ? igClip() : fullText());
       emitShared(archetype.name, platform.id, fmt.id, 'download');
-      setMsg('Image saved' + (c ? ' and caption copied' : '') + (platform.id === 'instagram' ? ' — open Instagram on your phone and add it to a post or story.' : ` — add it to your ${platform.label} post or story.`));
+      setMsg(isInstagram ? 'Image saved' + (c ? fmt.id === 'story' ? ' and link copied' : ' and caption + link copied' : '') + ' — open Instagram on your phone and follow the steps below.' : 'Image saved' + (c ? ' and caption copied' : '') + ` — add it to your ${platform.label} post or story.`);
     }
     const primaryLabel = canFiles ? `Share to ${platform.label}` : linkMode ? `Open ${platform.label}` : 'Save image';
-    const help = canFiles ? 'Opens your share sheet with the image and caption ready — choose ' + platform.label + '.' : linkMode ? `Opens ${platform.label} with this card already attached.` : platform.id === 'instagram' ? 'Saves the image and copies your caption. Then add it in the Instagram app.' : 'Saves the image and copies your caption. Then add it to your story.';
+    const help = phoneLink ? `Opens your share sheet — choose ${platform.label}. The card appears as the link preview.` : canFiles ? 'Opens your share sheet with the image and caption ready — choose ' + platform.label + '.' : linkMode ? `Opens ${platform.label} with this card already attached.` : platform.id === 'instagram' ? 'Saves the image and copies your caption. Then add it in the Instagram app.' : 'Saves the image and copies your caption. Then add it to your story.';
     return /*#__PURE__*/React.createElement("div", {
       className: "shr-overlay",
       onMouseDown: e => {
@@ -3878,7 +3931,19 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
       disabled: rendering
     }, primaryLabel), /*#__PURE__*/React.createElement("p", {
       className: "shr-help"
-    }, help), /*#__PURE__*/React.createElement("div", {
+    }, help), isInstagram && /*#__PURE__*/React.createElement("div", {
+      className: "shr-guide"
+    }, /*#__PURE__*/React.createElement("p", {
+      className: "shr-guide-t"
+    }, "Adding your link on Instagram"), /*#__PURE__*/React.createElement("ol", {
+      className: "shr-guide-l"
+    }, /*#__PURE__*/React.createElement("li", null, "Post your image as a ", /*#__PURE__*/React.createElement("strong", null, "Story"), " (or add it to your feed)."), /*#__PURE__*/React.createElement("li", null, "Before you post, tap the ", /*#__PURE__*/React.createElement("strong", null, "sticker"), " icon, choose ", /*#__PURE__*/React.createElement("strong", null, "Link"), ", and ", /*#__PURE__*/React.createElement("strong", null, "paste"), " the link", canFiles ? ' — we copy it when you tap Share' : '', "."), /*#__PURE__*/React.createElement("li", null, "Not copied? ", /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "shr-inline",
+      onClick: async () => setMsg((await copyText(pageUrl(archetype))) ? 'Link copied.' : 'Couldn’t copy automatically — long-press the link to copy it.')
+    }, "Copy the link"), ".")), /*#__PURE__*/React.createElement("p", {
+      className: "shr-guide-n"
+    }, "Links in a feed caption aren\u2019t tappable on Instagram \u2014 use the Story link sticker, or put the link in your bio.")), /*#__PURE__*/React.createElement("div", {
       className: "shr-links"
     }, /*#__PURE__*/React.createElement("button", {
       type: "button",
@@ -4081,6 +4146,12 @@ if (typeof window !== 'undefined') window.ARCHETYPE_DATA = ARCHETYPE_DATA;
         .shr-links { display:flex; gap:10px; justify-content:center; align-items:center; color:rgba(233,235,219,0.4); }
         .shr-link { background:none; border:none; color:rgba(233,235,219,0.8); font-family:'Nunito',sans-serif; font-weight:700; font-size:13px; text-decoration:underline; cursor:pointer; padding:8px 4px; }
         .shr-link:disabled { opacity:0.5; cursor:default; }
+        .shr-guide { margin:12px 0 2px; padding:12px 14px; border-radius:14px; background:rgba(233,235,219,0.07); border:1px solid rgba(233,235,219,0.14); text-align:left; }
+        .shr-guide-t { margin:0 0 6px; font-family:'Comfortaa',sans-serif; font-weight:700; font-size:13.5px; color:#E9EBDB; }
+        .shr-guide-l { margin:0; padding-left:20px; font-family:'Nunito',sans-serif; font-size:13px; line-height:1.55; color:rgba(233,235,219,0.85); }
+        .shr-guide-l li { margin:3px 0; }
+        .shr-guide-n { margin:8px 0 0; font-family:'Nunito',sans-serif; font-size:12.5px; line-height:1.45; color:rgba(233,235,219,0.6); }
+        .shr-inline { background:none; border:0; padding:0; font:inherit; color:#C9D6A8; text-decoration:underline; cursor:pointer; }
         .shr-msg { min-height:1.4em; margin:6px 0 0; text-align:center; font-family:'Nunito',sans-serif; font-size:13.5px; font-weight:600; color:#C9D6A8; line-height:1.4; }
         @media print { .shr-root, .shr-overlay, .shr-tb-btn { display:none !important; } }
       `);
