@@ -60,13 +60,18 @@
     if (!endpoint) return Promise.resolve({ ok: false, error: 'not_configured' });
     attempts = attempts || 1;
     // text/plain keeps this a "simple" request, so the browser doesn't need a pre-flight check.
+    var retry = function (fallback) {
+      if (attempts >= 4) return fallback;
+      return new Promise(function (res) { setTimeout(res, 1500 * attempts); }).then(function () { return post(body, attempts + 1); });
+    };
     return fetch(endpoint, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       keepalive: JSON.stringify(body).length < 60000, credentials: 'omit', redirect: 'follow' })
       .then(function (r) { return r.json(); })
-      .catch(function (err) {
-        if (attempts >= 3) return { ok: false, error: 'network' };
-        return new Promise(function (res) { setTimeout(res, 1500 * attempts); }).then(function () { return post(body, attempts + 1); });
-      });
+      .then(function (res) {
+        // The collector says "busy" when lots of people finish at once: wait and send again.
+        return (res && (res.error === 'busy' || res.error === 'server')) ? retry(res) : res;
+      })
+      .catch(function () { return retry({ ok: false, error: 'network' }); });
   }
 
   function ageRange(age) {

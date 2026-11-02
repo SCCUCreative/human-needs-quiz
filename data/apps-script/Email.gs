@@ -18,7 +18,8 @@ var C = { olive: '#434B30', oliveDeep: '#343B25', sand: '#E3DED2', paper: '#F6F3
 
 function sendResultsEmail_(contact, r, url) {
   var a = ARCHETYPES[r.archetype_key];
-  var subject = contact.first_name + ', you’re ' + a.name + ' — your Six Human Needs results';
+  // The person's name never goes in the subject line (it is the part of an email people act on).
+  var subject = 'Your Six Human Needs results: ' + a.name;
   var opts = { to: contact.email, subject: subject, name: SETTINGS.SENDER_NAME,
     htmlBody: buildEmailHtml_(contact, r, url), body: buildEmailText_(contact, r, url) };
   if (SETTINGS.REPLY_TO) opts.replyTo = SETTINGS.REPLY_TO;

@@ -8,6 +8,8 @@ const crypto = require('crypto');
 
 function makeSheet(name) {
   const rows = [];
+  // Sheets reports the last row that has any content
+  const trim = () => { while (rows.length && rows[rows.length - 1].every(v => v === '' || v == null)) rows.pop(); };
   const sh = {
     _rows: rows, _name: name,
     getName: () => name,
@@ -15,6 +17,7 @@ function makeSheet(name) {
     appendRow: (r) => { rows.push(r.slice()); return sh; },
     deleteRow: (n) => { rows.splice(n - 1, 1); },
     setFrozenRows: () => sh,
+    getMaxRows: () => Math.max(rows.length, 1000),
     getDataRange: () => sh.getRange(1, 1, Math.max(rows.length, 1), Math.max(...rows.map(r => r.length), 1)),
     getRange: (r, c, nr = 1, nc = 1) => {
       const range = {
@@ -23,6 +26,8 @@ function makeSheet(name) {
         setValues: (vals) => { vals.forEach((row, i) => { rows[r - 1 + i] = rows[r - 1 + i] || []; row.forEach((v, j) => { rows[r - 1 + i][c - 1 + j] = v; }); }); return range; },
         setValue: (v) => { rows[r - 1] = rows[r - 1] || []; rows[r - 1][c - 1] = v; return range; },
         setFontWeight: () => range,
+        setNumberFormat: () => range,
+        clearContent: () => { for (let i = 0; i < nr; i++) { if (rows[r - 1 + i]) for (let j = 0; j < nc; j++) rows[r - 1 + i][c - 1 + j] = ''; } trim(); return range; },
         createTextFinder: (text) => {
           let exact = false;
           const f = {
@@ -59,9 +64,10 @@ function loadCollector(opts = {}) {
   const dir = path.join(__dirname, '..', 'apps-script');
   const files = ['ArchetypeData.gs', 'Email.gs', 'Code.gs'];
   const store = {}, props = {}, cache = {}, mails = [], triggers = [];
+  let locked = false;
   const now = () => (opts.clock ? opts.clock() : Date.now());
   const ctx = {
-    console, Date, Math, JSON, String, Number, Array, Object, RegExp, isFinite, encodeURIComponent,
+    console: opts.quiet ? { log() {}, error() {} } : console, Date, Math, JSON, String, Number, Array, Object, RegExp, isFinite, encodeURIComponent,
     Logger: { log: () => {} },
     SpreadsheetApp: {
       create: (name) => { const id = 'ss' + (Object.keys(store).length + 1); store[id] = makeSpreadsheet(name, id); return store[id]; },
@@ -70,9 +76,13 @@ function loadCollector(opts = {}) {
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] ?? null, setProperty: (k, v) => { props[k] = String(v); } }) },
     CacheService: { getScriptCache: () => ({
       get: (k) => { const e = cache[k]; return e && e.exp > now() ? e.v : null; },
-      put: (k, v, s) => { cache[k] = { v, exp: now() + s * 1000 }; },
+      put: (k, v, s) => { if (k.length > 250) throw new Error('cache key too long'); cache[k] = { v, exp: now() + Math.min(s, 21600) * 1000 }; },
+      remove: (k) => { delete cache[k]; },
     }) },
-    LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    LockService: { getScriptLock: () => ({
+      tryLock: () => { if (opts.lockBusy) return false; if (locked) throw new Error('nested lock'); locked = true; return true; },
+      waitLock: () => { locked = true; }, releaseLock: () => { locked = false; },
+    }) },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
       DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },

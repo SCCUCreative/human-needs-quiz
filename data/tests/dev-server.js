@@ -7,6 +7,8 @@ const { loadCollector } = require('./fake-gas');
 const port = Number(process.argv[2] || 8771);
 const c = loadCollector();
 c.setup();
+// Quick manual runs can't take minutes per quiz: HNQ_MIN_SECONDS=0 node data/tests/dev-server.js
+if (process.env.HNQ_MIN_SECONDS) c.ctx.SETTINGS.MIN_COMPLETE_SECONDS = Number(process.env.HNQ_MIN_SECONDS);
 
 http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
