@@ -16,7 +16,8 @@
   // Public address of the quiz. Shared links, link-card pages and the static card images
   // all hang off it:  <base>share/<archetype>/   and   <base>cards/<archetype>-card.jpg
   const SHARE_URL_OVERRIDE = null; // null = use QUIZ_URL below
-  const QUIZ_URL = 'https://www.nubuverse.com/human-needs-quiz/';
+  // Comes from HNQ_CONFIG.quizUrl (quiz-data.js) so the domain switch is one edit.
+  const QUIZ_URL = (window.HNQ_CONFIG && window.HNQ_CONFIG.quizUrl) || 'https://scottfree.live/human-needs-quiz/';
   const HERO_W = 3000; // width asked from Cloudinary for the scene art (the landscape card is drawn at 2x)
 
   const FORMATS = [

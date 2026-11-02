@@ -11,7 +11,7 @@ larger preview images, so it gets its own twin page at share/<archetype>/wa/.
 """
 import html, json, os, re, struct, subprocess, sys
 
-QUIZ_URL = 'https://www.nubuverse.com/human-needs-quiz/'
+QUIZ_URL = 'https://scottfree.live/human-needs-quiz/'
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'tools', 'archetypes-data.js')
 
