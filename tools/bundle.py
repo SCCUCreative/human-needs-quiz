@@ -9,6 +9,9 @@ Usage (from the repo root):
   python3 tools/bundle.py unpack build/src     # writes one file per resource + template.html + names.json
   python3 tools/bundle.py pack   build/src     # writes the edited files back into index.html
 
+To add a new script: put the file in the unpacked folder, add "name": "<new uuid>" to names.json
+(and to KNOWN below), and add <script src="<new uuid>"></script> to template.html where it should load.
+
 Only text resources are written back; fonts and anything you did not touch are re-emitted byte for byte.
 """
 import base64, gzip, json, os, re, sys
@@ -28,6 +31,7 @@ KNOWN = {
     '1460ad19-65ca-4c9c-8533-3d14cfd3bb64': 'quiz-screens.jsx',
     '5275a9b8-7da3-49d4-bb50-62dcdf51e63a': 'quiz-report.jsx',
     '2c15bd6c-3a7b-5027-81db-b0e3796fed8b': 'quiz-share.jsx',
+    '8f1d6a52-3c1e-5b7a-9e40-4d2b7c6e1a90': 'quiz-capture.js',
 }
 
 
@@ -59,7 +63,9 @@ def pack(src):
     names = json.load(open(os.path.join(src, 'names.json')))
     for name, k in names.items():
         raw = open(os.path.join(src, name), 'rb').read()
-        v = man[k]
+        # A script added after the original bundle (e.g. quiz-capture.js) gets a new manifest entry;
+        # its <script src="uuid"> tag is added to template.html by hand.
+        v = man.setdefault(k, {'mime': 'application/javascript', 'compressed': True, 'data': ''})
         data = gzip.compress(raw, 9, mtime=0) if v.get('compressed') else raw
         man[k] = {**v, 'data': base64.b64encode(data).decode()}
     tpl = open(os.path.join(src, 'template.html'), encoding='utf-8').read()
