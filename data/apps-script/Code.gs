@@ -36,8 +36,13 @@ var SETTINGS = {
   MIN_COMPLETE_SECONDS: 30,           // a full quiz faster than this (timed by the server) gets no email
   MAX_EMAILS_PER_ADDRESS_PER_HOUR: 3,
   MAX_EMAILS_PER_DAY: 800,            // whole-site cap (Workspace allows about 1,500 a day)
-  MAX_WRITES_PER_MINUTE: 60,          // whole-site caps, so the spreadsheets can't be flooded
-  MAX_WRITES_PER_HOUR: 1500,
+  // Whole-site caps so the spreadsheets can't be flooded. Starts and completions have their own,
+  // larger budget so a burst of junk can't stop real people finishing (e.g. a room scanning the QR code).
+  MAX_WRITES_PER_MINUTE: 300,         // visits, shares, feedback, under-18 counts
+  MAX_WRITES_PER_HOUR: 6000,
+  MAX_QUIZ_WRITES_PER_MINUTE: 600,    // starts and completions
+  MAX_QUIZ_WRITES_PER_HOUR: 20000,
+  MAX_REPORT_READS_PER_MINUTE: 300,
   MAX_QUARANTINE_PER_HOUR: 50,
   MAX_BODY_BYTES: 12000,
   QUIZ_VERSIONS: ['1.0.0'],           // accepted quiz versions (add new ones when the quiz copy changes)
@@ -127,9 +132,9 @@ function doPost(e) {
   try { body = JSON.parse(raw); } catch (err) { return json_({ ok: false, error: 'bad_json' }); }
   if (!body || typeof body !== 'object') return json_({ ok: false, error: 'bad_json' });
   try {
-    if (!writeBudgetOk_()) return json_({ ok: false, error: 'busy' });
     var type = String(body.type || '');
     if (EVENT_TYPES.indexOf(type) < 0) return json_(quarantine_('unknown_type', body));
+    if (!writeBudgetOk_(type === 'start' || type === 'complete' ? 'quiz' : 'other')) return json_({ ok: false, error: 'busy' });
     if (body.hp) return json_(quarantine_('honeypot', body));          // hidden field only bots fill in
     if (type === 'complete') return json_(handleComplete_(body));
     if (type === 'feedback') return json_(handleFeedback_(body));
@@ -144,7 +149,10 @@ function doPost(e) {
 function doGet(e) {
   var p = (e && e.parameter) || {};
   try {
-    if (p.action === 'report') return json_(handleReport_(String(p.token || '')));
+    if (p.action === 'report') {
+      if (!rateOk_('rg:' + Math.floor(Date.now() / 60000), SETTINGS.MAX_REPORT_READS_PER_MINUTE, 120)) return json_({ ok: false, error: 'busy' });
+      return json_(handleReport_(String(p.token || '')));
+    }
   } catch (err) { console.error(err); return json_({ ok: false, error: 'server' }); }
   return json_({ ok: true, service: 'hnq-collector' });
 }
@@ -226,14 +234,24 @@ function handleComplete_(b) {
   return { ok: true, token: token, emailed: status === 'sent' };
 }
 
+// When did the server see this attempt start? Quick cache first; the Events sheet if the cache has
+// dropped it (the cache can forget early, and keeps nothing beyond 6 hours).
+function startedAt_(aid) {
+  var cached = Number(CacheService.getScriptCache().get('s:' + aid) || 0);
+  if (cached) return cached;
+  var row = findRow_('RESULTS_ID', 'Events', 'assessment_id', aid);       // first row for this attempt = its start
+  if (!row) return 0;
+  var vals = sheet_('RESULTS_ID', 'Events').getRange(row, 1, 1, 3).getValues()[0];
+  return vals[2] === 'start' && vals[0] instanceof Date ? vals[0].getTime() : 0;
+}
+
 // Should this completion get a results email? Returns 'send' or the reason it won't.
+// (A repeat of the same attempt never gets here: duplicates are caught before this runs.)
 function emailDecision_(ctx, c) {
   if (!SETTINGS.SEND_RESULTS_EMAIL) return 'off';
-  var cache = CacheService.getScriptCache();
-  var started = Number(cache.get('s:' + ctx.assessment_id) || 0);
+  var started = startedAt_(ctx.assessment_id);
   if (!started) return 'no_start';                                        // never saw this attempt begin
   if ((Date.now() - started) / 1000 < SETTINGS.MIN_COMPLETE_SECONDS) return 'too_fast';
-  cache.remove('s:' + ctx.assessment_id);                                  // one email per attempt
   if (!rateOk_('e:' + hash_(normaliseEmail_(c.email)).slice(0, 40), SETTINGS.MAX_EMAILS_PER_ADDRESS_PER_HOUR, 3600)) return 'address_limit';
   if (!dailyEmailOk_()) return 'daily_limit';
   return 'send';
@@ -289,26 +307,33 @@ function handleConnect_(type, b) {
 function handleReport_(token) {
   if (!TOKEN_RE.test(token)) return { ok: false, error: 'invalid' };
   if (!rateOk_('r:' + token.slice(0, 16), 60, 3600)) return { ok: false, error: 'rate_limited' };
-  return withLock_(function () {
-    var rowNum = findRow_('RESULTS_ID', 'Assessments', 'token_hash', hash_(token));
-    if (!rowNum) return { ok: false, error: 'not_found' };
-    var sh = sheet_('RESULTS_ID', 'Assessments');
-    var vals = sh.getRange(rowNum, 1, 1, HEADERS.Assessments.length).getValues()[0];
-    var g = function (k) { return vals[HEADERS.Assessments.indexOf(k)]; };
-    var d = g('date');
-    var out = { primary: g('primary_need'), secondary: g('secondary_need'), confidence: g('confidence'),
-      fulfilment_state: g('fulfilment_state'), archetype_key: g('archetype_key'), age_band: g('age_band'),
-      percentages: {}, raw_scores: {}, fulfilment: {}, assessment_id: g('assessment_id'),
-      date: d instanceof Date ? Utilities.formatDate(d, 'Europe/London', 'yyyy-MM-dd') : String(d || ''),
-      accuracy: g('accuracy') || '' };
-    NEEDS.forEach(function (n) { out.percentages[n] = g('pct_' + n); out.raw_scores[n] = g('score_' + n); out.fulfilment[n] = g('fulfil_' + n); });
-    // The first name given for this particular attempt, while it is still held.
-    var nRow = findRow_('CONTACTS_ID', 'Report names', 'assessment_id', g('assessment_id'));
-    out.first_name = nRow ? unsafe_(sheet_('CONTACTS_ID', 'Report names').getRange(nRow, HEADERS['Report names'].indexOf('first_name') + 1).getValue()) : '';
-    sh.getRange(rowNum, HEADERS.Assessments.indexOf('report_views') + 1).setValue((Number(g('report_views')) || 0) + 1);
-    sh.getRange(rowNum, HEADERS.Assessments.indexOf('last_report_view') + 1).setValue(new Date());
-    return { ok: true, result: out };
+  // Reading doesn't need the lock (it would hold up people finishing the quiz); only the view count does.
+  var rowNum = findRow_('RESULTS_ID', 'Assessments', 'token_hash', hash_(token));
+  if (!rowNum) return { ok: false, error: 'not_found' };
+  var sh = sheet_('RESULTS_ID', 'Assessments');
+  var vals = sh.getRange(rowNum, 1, 1, HEADERS.Assessments.length).getValues()[0];
+  var g = function (k) { return vals[HEADERS.Assessments.indexOf(k)]; };
+  if (g('token_hash') !== hash_(token)) return { ok: false, error: 'not_found' };   // row moved while reading
+  var d = g('date');
+  var out = { primary: g('primary_need'), secondary: g('secondary_need'), confidence: g('confidence'),
+    fulfilment_state: g('fulfilment_state'), archetype_key: g('archetype_key'), age_band: g('age_band'),
+    percentages: {}, raw_scores: {}, fulfilment: {}, assessment_id: g('assessment_id'),
+    date: d instanceof Date ? Utilities.formatDate(d, 'Europe/London', 'yyyy-MM-dd') : String(d || ''),
+    accuracy: g('accuracy') || '' };
+  NEEDS.forEach(function (n) { out.percentages[n] = g('pct_' + n); out.raw_scores[n] = g('score_' + n); out.fulfilment[n] = g('fulfil_' + n); });
+  // The first name given for this particular attempt, while it is still held.
+  var nRow = findRow_('CONTACTS_ID', 'Report names', 'assessment_id', g('assessment_id'));
+  out.first_name = nRow ? unsafe_(sheet_('CONTACTS_ID', 'Report names').getRange(nRow, HEADERS['Report names'].indexOf('first_name') + 1).getValue()) : '';
+  withLock_(function () {
+    var r = findRow_('RESULTS_ID', 'Assessments', 'token_hash', hash_(token));
+    if (r) {
+      var cur = Number(sh.getRange(r, HEADERS.Assessments.indexOf('report_views') + 1).getValue()) || 0;
+      sh.getRange(r, HEADERS.Assessments.indexOf('report_views') + 1).setValue(cur + 1);
+      sh.getRange(r, HEADERS.Assessments.indexOf('last_report_view') + 1).setValue(new Date());
+    }
+    return {};
   });
+  return { ok: true, result: out };
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────────
@@ -464,6 +489,8 @@ function rewriteKeeping_(propKey, name, keep) {
   var kept = rows.filter(keep);
   if (kept.length === rows.length) return 0;
   sh.getRange(2, 1, last - 1, width).clearContent();
+  // Sheets drops the protective apostrophe when values are read back, so protect text again before writing.
+  kept = kept.map(function (row) { return row.map(function (v) { return typeof v === 'string' ? safe_(v) : v; }); });
   if (kept.length) sh.getRange(2, 1, kept.length, width).setValues(kept);
   return rows.length - kept.length;
 }
@@ -520,20 +547,21 @@ function onceInWindow_(key, seconds) {
   cache.put(key, '1', seconds);
   return true;
 }
-function writeBudgetOk_() {
+function writeBudgetOk_(kind) {
   var minute = Math.floor(Date.now() / 60000), hour = Math.floor(Date.now() / 3600000);
-  return rateOk_('m:' + minute, SETTINGS.MAX_WRITES_PER_MINUTE, 120) && rateOk_('h:' + hour, SETTINGS.MAX_WRITES_PER_HOUR, 3700);
+  var quiz = kind === 'quiz';
+  return rateOk_((quiz ? 'qm:' : 'm:') + minute, quiz ? SETTINGS.MAX_QUIZ_WRITES_PER_MINUTE : SETTINGS.MAX_WRITES_PER_MINUTE, 120) &&
+         rateOk_((quiz ? 'qh:' : 'h:') + hour, quiz ? SETTINGS.MAX_QUIZ_WRITES_PER_HOUR : SETTINGS.MAX_WRITES_PER_HOUR, 3700);
 }
 // Whole-site daily email cap, counted in script properties (the cache can't hold a value for a full day).
+// No lock here on purpose: a rare miscount under heavy load is harmless; a lost email is not.
 function dailyEmailOk_() {
-  return withLock_(function () {
-    var props = PropertiesService.getScriptProperties();
-    var key = 'mail:' + Utilities.formatDate(new Date(), 'Europe/London', 'yyyy-MM-dd');
-    var n = Number(props.getProperty(key) || 0);
-    if (n >= SETTINGS.MAX_EMAILS_PER_DAY) return false;
-    props.setProperty(key, String(n + 1));
-    return true;
-  }) === true;
+  var props = PropertiesService.getScriptProperties();
+  var key = 'mail:' + Utilities.formatDate(new Date(), 'Europe/London', 'yyyy-MM-dd');
+  var n = Number(props.getProperty(key) || 0);
+  if (n >= SETTINGS.MAX_EMAILS_PER_DAY) return false;
+  props.setProperty(key, String(n + 1));
+  return true;
 }
 function archetypeKey_(a, b) { return [a, b].sort(function (x, y) { return NEEDS.indexOf(x) - NEEDS.indexOf(y); }).join('|'); }
 function pick_(v, list, dflt) { v = String(v || '').toLowerCase(); for (var i = 0; i < list.length; i++) if (list[i].toLowerCase() === v) return list[i]; return dflt; }

@@ -274,4 +274,41 @@ test('retention clean-up, quarantine clean-up and erasure', () => {
   assert.strictEqual(c.table('CONTACTS_ID', 'Erasure log').length, 2);
 });
 
+test('cache dropped the start record: falls back to the Events sheet and still emails', () => {
+  const c = fresh();
+  const body = complete();
+  c.post({ type: 'start', session_id: body.session_id, assessment_id: body.assessment_id, age_range: '25-34' });
+  // Sheets keeps the real time; move it back as if the start was 4 minutes ago, then lose the cache.
+  c.rows('RESULTS_ID', 'Events')[1][0] = new Date(Date.now() - 240000);
+  c.clearCache();
+  assert.strictEqual(c.post(body).emailed, true);
+});
+
+test('junk traffic can use up the general budget without blocking real starts and completions', () => {
+  const c = fresh(); c.ctx.SETTINGS.MAX_WRITES_PER_MINUTE = 2;
+  [1, 2, 3, 4].forEach(i => c.post({ type: 'visit', session_id: 'sess-junk-000' + i }));
+  assert.strictEqual(c.post({ type: 'visit', session_id: 'sess-junk-0009' }).error, 'busy');
+  assert.strictEqual(run(c, complete()).emailed, true);
+});
+
+test('reading a report works even while writes hold the lock', () => {
+  const c = fresh();
+  const { token } = run(c, complete());
+  c.setLockBusy(true);
+  assert.strictEqual(c.get({ action: 'report', token }).ok, true);
+  c.setLockBusy(false);
+});
+
+test('clean-up re-protects text that Sheets hands back without its apostrophe', () => {
+  const c = fresh();
+  c.post({ type: 'nope' }); c.post({ type: 'nope2' });
+  const q = c.rows('CONTACTS_ID', 'Quarantine');
+  q[1][2] = '=IMAGE("https://evil/x")';                    // as Sheets returns it, apostrophe gone
+  q[2][0] = new Date(Date.now() - 40 * 86400000);          // an old row so the sheet gets rewritten
+  c.ctx.dailyCleanup();
+  const rows = c.table('CONTACTS_ID', 'Quarantine');
+  assert.strictEqual(rows.length, 1);
+  assert.ok(String(rows[0].type).startsWith("'="), rows[0].type);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

@@ -74,7 +74,9 @@ Take the quiz on your phone with your own email address. You should get the "You
 | `MIN_COMPLETE_SECONDS` | `30` | Timed by the collector from the "start" it saw. Faster than this: results saved, no email. |
 | `MAX_EMAILS_PER_ADDRESS_PER_HOUR` | `3` | Per inbox, ignoring `+tags` and Gmail dots, so the form can't flood someone's inbox. |
 | `MAX_EMAILS_PER_DAY` | `800` | Whole-site cap, safely under Google's ~1,500 a day. |
-| `MAX_WRITES_PER_MINUTE` / `_PER_HOUR` | `60` / `1500` | Whole-site caps so the spreadsheets can't be flooded. Raise them for a big launch moment. |
+| `MAX_QUIZ_WRITES_PER_MINUTE` / `_PER_HOUR` | `600` / `20000` | Caps on quiz starts and completions, kept separate so junk traffic can't block real people. |
+| `MAX_WRITES_PER_MINUTE` / `_PER_HOUR` | `300` / `6000` | Caps on everything else (visits, shares, feedback), so the spreadsheets can't be flooded. |
+| `MAX_REPORT_READS_PER_MINUTE` | `300` | Revisit-link opens across the whole site. |
 | `QUARANTINE_DAYS` | `30` | Rejected submissions are cleared after this. |
 | `QUIZ_VERSIONS` / `SCORING_VERSIONS` | `1.0.0` | Add the new number here when `quizVersion`/`scoringVersion` change in the quiz. |
 | `FEATURES` | both `false` | Stay connected and accounts (see below). |

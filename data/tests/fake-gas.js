@@ -102,6 +102,8 @@ function loadCollector(opts = {}) {
   const sheetRows = (propKey, name) => store[props[propKey]].getSheetByName(name)._rows;
   return {
     ctx, store, props, mails, triggers,
+    clearCache: () => { for (const k of Object.keys(cache)) delete cache[k]; },
+    setLockBusy: (v) => { opts.lockBusy = v; },
     setup: () => ctx.setup(),
     post: (body) => JSON.parse(ctx.doPost({ postData: { contents: typeof body === 'string' ? body : JSON.stringify(body) } }).getContent()),
     get: (params) => JSON.parse(ctx.doGet({ parameter: params }).getContent()),
