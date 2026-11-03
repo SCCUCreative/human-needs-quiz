@@ -34,7 +34,8 @@
     try { var r = document.referrer && new URL(document.referrer); if (r && r.host !== location.host) refHost = r.host.replace(/^www\./, ''); } catch (e) {}
     var src = q.get('src') || q.get('utm_source') || '';
     if (!src && refHost) src = /facebook|fb\.|instagram|linkedin|lnkd|t\.co$|twitter|x\.com|whatsapp|wa\.me/.test(refHost) ? refHost.split('.')[0] : 'referral';
-    var w = Math.min(screen.width || innerWidth, innerWidth);
+    var coarse = false; try { coarse = matchMedia('(pointer: coarse)').matches; } catch (e) {}
+    var w = coarse ? Math.min(screen.width || innerWidth, screen.height || innerHeight) : 9999;
     var c = {
       session_id: uuid(),
       source: (src || 'direct').toLowerCase().slice(0, 60),
@@ -124,6 +125,7 @@
     });
     post(body).then(function (res) {
       if (res && res.ok && res.token) { state.token = res.token; ss('hnq_token', res.token); }
+      window.HNQ_LAST_SENT = { ok: !!(res && res.ok), emailed: !!(res && res.emailed), email: who.email, assessmentId: state.assessmentId };
       try { window.dispatchEvent(new CustomEvent('hnq:sent', { detail: { ok: !!(res && res.ok), emailed: !!(res && res.emailed), email: who.email, configured: !!endpoint } })); } catch (err) {}
     });
   });
